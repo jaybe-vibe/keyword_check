@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Data (runtime output)
+data/
+
+# bkit
+.bkit/
+
+# Claude Code
+.claude/

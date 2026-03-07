@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  keyword-check:
+    build: .
+    container_name: keyword_check
+    restart: unless-stopped
+    ports:
+      - "8502:8502"
+    volumes:
+      - ./data:/app/data
+      - ./config.json:/app/config.json
+      - ./.env:/app/.env
+    environment:
+      - TZ=Asia/Seoul
