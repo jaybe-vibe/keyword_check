@@ -23,12 +23,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Playwright Chromium 설치
 RUN playwright install chromium && playwright install-deps chromium
 
-# 프로젝트 파일 복사
-COPY . .
+# non-root 사용자 생성
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser
 
-# Streamlit 설정
-RUN mkdir -p /root/.streamlit
-RUN printf '[server]\nheadless = true\nport = 8502\nenableCORS = false\nenableXsrfProtection = false\n\n[browser]\ngatherUsageStats = false\n' > /root/.streamlit/config.toml
+# 프로젝트 파일 복사
+COPY --chown=appuser:appuser . .
+
+# Streamlit 설정 (XSRF/CORS 보호 유지)
+RUN mkdir -p /home/appuser/.streamlit
+RUN printf '[server]\nheadless = true\nport = 8502\nenableXsrfProtection = true\nenableCORS = false\n\n[browser]\ngatherUsageStats = false\n' > /home/appuser/.streamlit/config.toml
+RUN chown -R appuser:appuser /home/appuser/.streamlit
+
+# non-root로 실행
+USER appuser
 
 EXPOSE 8502
 

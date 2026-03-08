@@ -45,6 +45,14 @@ def parse_date(date_str: str) -> datetime | None:
             return None
 
     now = datetime.now()
+    match = re.match(r'(\d+)분\s*전', date_str)
+    if match:
+        return now - timedelta(minutes=int(match.group(1)))
+
+    match = re.match(r'(\d+)시간\s*전', date_str)
+    if match:
+        return now - timedelta(hours=int(match.group(1)))
+
     match = re.match(r'(\d+)일\s*전', date_str)
     if match:
         return now - timedelta(days=int(match.group(1)))
@@ -145,8 +153,12 @@ def classify_all(results: dict) -> dict:
     return analyses
 
 
-def get_keywords_by_type(results: dict) -> dict:
+def get_keywords_by_type(results: dict, analyses: dict | None = None) -> dict:
     """유형별 키워드 목록 (우선순위: 해당 유형 아이템 수가 많을수록 상위)
+
+    Args:
+        results: {keyword: KeywordResult} 딕셔너리
+        analyses: 이미 계산된 {keyword: analysis_dict}. None이면 내부에서 계산.
 
     Returns:
         {
@@ -163,7 +175,7 @@ def get_keywords_by_type(results: dict) -> dict:
             continue
         if not result.recommended_types:
             continue
-        analysis = analyze_keyword(result)
+        analysis = (analyses or {}).get(keyword) or analyze_keyword(result)
         for ctype in result.recommended_types:
             if ctype == "지식인":
                 count = analysis["type_counts"][ctype]
@@ -171,7 +183,6 @@ def get_keywords_by_type(results: dict) -> dict:
                 count = analysis["type_recent_counts"][ctype]
             by_type[ctype].append((keyword, count))
 
-    # 각 유형 내에서 count 기준 내림차순 정렬
     for ctype in by_type:
         by_type[ctype].sort(key=lambda x: x[1], reverse=True)
 

@@ -9,7 +9,7 @@ services:
       - "8502:8502"
     volumes:
       - ./data:/app/data
-      - ./config.json:/app/config.json
-      - ./.env:/app/.env
+    env_file:
+      - .env
     environment:
       - TZ=Asia/Seoul

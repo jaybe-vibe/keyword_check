@@ -6,11 +6,23 @@ Playwright 기반 네이버 검색 크롤러
 - 일시정지/재개/중지 제어
 """
 
+import logging
 import random
 import time
 import urllib.parse
 from typing import Optional, Callable
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
+
+logger = logging.getLogger(__name__)
+
+# User-Agent 풀 (Chrome 최신 버전들)
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+]
 
 
 class NaverCrawler:
@@ -78,11 +90,7 @@ class NaverCrawler:
             locale="ko-KR",
             timezone_id="Asia/Seoul",
             viewport={"width": 1280, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
-            ),
+            user_agent=random.choice(USER_AGENTS),
         )
         self._page = self._context.new_page()
         self._page.set_default_timeout(self.page_load_timeout)
@@ -127,7 +135,7 @@ class NaverCrawler:
             # 네이버 검색 페이지 이동
             encoded = urllib.parse.quote(keyword)
             search_url = f"https://search.naver.com/search.naver?query={encoded}"
-            self._page.goto(search_url, wait_until="networkidle")
+            self._page.goto(search_url, wait_until="domcontentloaded")
 
             # 메인 콘텐츠 로딩 대기
             try:
@@ -254,8 +262,8 @@ class NaverCrawler:
                 self._browser.close()
             if self._playwright:
                 self._playwright.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("크롤러 종료 중 오류: %s", e)
         self._report("크롤러 종료")
 
     @property

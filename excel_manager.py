@@ -40,7 +40,7 @@ class ExcelReportGenerator:
     """Excel 분석 리포트 생성"""
 
     def __init__(self):
-        self.wb = Workbook()
+        self.wb = None
 
     def generate(self, results: dict, output_path: str) -> str:
         """
@@ -53,6 +53,7 @@ class ExcelReportGenerator:
         Returns:
             저장된 파일 경로
         """
+        self.wb = Workbook()
         self._create_keyword_sheet(results)
         self._create_detail_sheet(results)
         self._create_related_sheet(results)

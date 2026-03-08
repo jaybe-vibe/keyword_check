@@ -6,6 +6,12 @@ __pycache__/
 # Environment
 .env
 
+# Runtime config
+config.json
+
+# PDCA docs (optional, keep if sharing)
+docs/
+
 # IDE
 .vscode/
 .idea/

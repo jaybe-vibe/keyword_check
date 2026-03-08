@@ -9,10 +9,15 @@ API 문서: https://github.com/naver/searchad-apidoc
 import base64
 import hashlib
 import hmac
+import logging
 import time
 import urllib.parse
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.searchad.naver.com"
 
@@ -24,6 +29,32 @@ def _safe_float(value) -> float:
     return 0.0
 
 
+def _safe_int(value) -> int:
+    """API 응답값을 안전하게 int로 변환 ('< 10' → 5)"""
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return 5
+    return int(value) if isinstance(value, float) else 0
+
+
+def _parse_keyword_item(item: dict) -> dict:
+    """API 응답 아이템을 공통 포맷으로 파싱"""
+    pc = _safe_int(item.get("monthlyPcQcCnt", 0))
+    mobile = _safe_int(item.get("monthlyMobileQcCnt", 0))
+    return {
+        "pc": pc,
+        "mobile": mobile,
+        "total": pc + mobile,
+        "competition": item.get("compIdx", ""),
+        "avg_pc_clicks": _safe_float(item.get("monthlyAvePcClkCnt", 0)),
+        "avg_mobile_clicks": _safe_float(item.get("monthlyAveMobileClkCnt", 0)),
+        "avg_pc_ctr": _safe_float(item.get("monthlyAvePcCtr", 0)),
+        "avg_mobile_ctr": _safe_float(item.get("monthlyAveMobileCtr", 0)),
+        "avg_ad_count": _safe_float(item.get("plAvgDepth", 0)),
+    }
+
+
 class NaverAdsAPIClient:
     """네이버 검색광고 API 클라이언트"""
 
@@ -31,6 +62,15 @@ class NaverAdsAPIClient:
         self.customer_id = customer_id
         self.api_key = api_key
         self.secret_key = secret_key
+        self._session = self._create_session()
+
+    def _create_session(self) -> requests.Session:
+        """재시도 로직이 포함된 requests 세션 생성"""
+        session = requests.Session()
+        retry = Retry(total=3, backoff_factor=1.0, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("https://", adapter)
+        return session
 
     def _generate_signature(self, timestamp: str, method: str, uri: str) -> str:
         """HMAC-SHA256 서명 생성"""
@@ -54,30 +94,16 @@ class NaverAdsAPIClient:
         }
 
     def get_keyword_volumes(self, keywords: list[str], show_detail: int = 1) -> list[dict]:
-        """
-        키워드 검색량 조회.
-
-        Args:
-            keywords: 키워드 리스트
-            show_detail: 1이면 월별 PC/모바일 상세 포함
-
-        Returns:
-            [{"relKeyword": str, "monthlyPcQcCnt": int, "monthlyMobileQcCnt": int, "compIdx": str, ...}]
-        """
+        """키워드 검색량 조회."""
         uri = "/keywordstool"
         method = "GET"
         headers = self._get_headers(method, uri)
 
-        # 네이버 API는 공백 포함 키워드를 거부하므로 공백 제거 후 전송
         cleaned = [kw.replace(" ", "") for kw in keywords]
         encoded_keywords = ",".join(urllib.parse.quote(kw) for kw in cleaned)
         url = f"{BASE_URL}{uri}?hintKeywords={encoded_keywords}&showDetail={show_detail}"
 
-        response = requests.get(
-            url,
-            headers=headers,
-            timeout=30,
-        )
+        response = self._session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
         return data.get("keywordList", [])
@@ -88,15 +114,9 @@ class NaverAdsAPIClient:
         batch_size: int = 5,
         delay: float = 0.5,
     ) -> dict:
-        """
-        배치 단위로 검색량 조회.
-
-        Returns:
-            {keyword: {"pc": int, "mobile": int, "total": int, "competition": str}}
-        """
+        """배치 단위로 검색량 조회."""
         results = {}
 
-        # 공백 제거 키워드 → 원본 키워드 매핑 (API는 공백 없는 키워드를 반환)
         stripped_to_original = {}
         for kw in keywords:
             stripped_to_original[kw.replace(" ", "")] = kw
@@ -107,94 +127,45 @@ class NaverAdsAPIClient:
                 api_results = self.get_keyword_volumes(batch)
                 for item in api_results:
                     rel_kw = item.get("relKeyword", "")
-                    pc = item.get("monthlyPcQcCnt", 0)
-                    mobile = item.get("monthlyMobileQcCnt", 0)
+                    vol_data = _parse_keyword_item(item)
 
-                    # 네이버는 낮은 검색량에 "< 10" 문자열 반환
-                    if isinstance(pc, str):
-                        pc = 5
-                    if isinstance(mobile, str):
-                        mobile = 5
-
-                    vol_data = {
-                        "pc": int(pc),
-                        "mobile": int(mobile),
-                        "total": int(pc) + int(mobile),
-                        "competition": item.get("compIdx", ""),
-                        "avg_pc_clicks": _safe_float(item.get("monthlyAvePcClkCnt", 0)),
-                        "avg_mobile_clicks": _safe_float(item.get("monthlyAveMobileClkCnt", 0)),
-                        "avg_pc_ctr": _safe_float(item.get("monthlyAvePcCtr", 0)),
-                        "avg_mobile_ctr": _safe_float(item.get("monthlyAveMobileCtr", 0)),
-                        "avg_ad_count": _safe_float(item.get("plAvgDepth", 0)),
-                    }
-
-                    # 원본 키워드(공백 포함)로 매칭 시도
                     original_kw = stripped_to_original.get(rel_kw.replace(" ", ""), rel_kw)
                     results[original_kw] = vol_data
 
-                    # 공백 없는 키워드도 추가 (원본과 다른 경우)
                     if rel_kw != original_kw:
                         results[rel_kw] = vol_data
 
             except Exception as e:
+                logger.warning("배치 %d 검색량 조회 실패: %s", i // batch_size + 1, e)
                 for kw in batch:
                     if kw not in results:
                         results[kw] = {
-                            "pc": 0,
-                            "mobile": 0,
-                            "total": 0,
+                            "pc": 0, "mobile": 0, "total": 0,
                             "competition": "",
-                            "error": str(e),
+                            "error": "조회 실패",
                         }
 
-            # 배치 간 딜레이
             if i + batch_size < len(keywords):
                 time.sleep(delay)
 
         return results
 
     def get_related_keywords(self, keyword: str) -> list[dict]:
-        """
-        키워드의 연관키워드 목록 조회 (검색량 포함).
-
-        네이버 API는 hintKeywords로 검색하면 해당 키워드 + 연관키워드를 모두 반환.
-        원본 키워드를 제외한 나머지가 연관키워드.
-
-        Returns:
-            [{"keyword": str, "pc": int, "mobile": int, "total": int,
-              "competition": str, "avg_pc_clicks": float, ...}]
-        """
+        """키워드의 연관키워드 목록 조회 (검색량 포함)."""
         try:
             api_results = self.get_keyword_volumes([keyword])
-        except Exception:
+        except Exception as e:
+            logger.warning("연관키워드 조회 실패 (%s): %s", keyword, e)
             return []
 
         cleaned_kw = keyword.replace(" ", "")
         related = []
         for item in api_results:
             rel_kw = item.get("relKeyword", "")
-            # 원본 키워드 자체는 제외
             if rel_kw.replace(" ", "") == cleaned_kw:
                 continue
-
-            pc = item.get("monthlyPcQcCnt", 0)
-            mobile = item.get("monthlyMobileQcCnt", 0)
-            if isinstance(pc, str):
-                pc = 5
-            if isinstance(mobile, str):
-                mobile = 5
-
-            related.append({
-                "keyword": rel_kw,
-                "pc": int(pc),
-                "mobile": int(mobile),
-                "total": int(pc) + int(mobile),
-                "competition": item.get("compIdx", ""),
-                "avg_pc_clicks": _safe_float(item.get("monthlyAvePcClkCnt", 0)),
-                "avg_mobile_clicks": _safe_float(item.get("monthlyAveMobileClkCnt", 0)),
-                "avg_pc_ctr": _safe_float(item.get("monthlyAvePcCtr", 0)),
-                "avg_mobile_ctr": _safe_float(item.get("monthlyAveMobileCtr", 0)),
-                "avg_ad_count": _safe_float(item.get("plAvgDepth", 0)),
-            })
+            vol_data = _parse_keyword_item(item)
+            vol_data["keyword"] = rel_kw
+            related.append(vol_data)
 
         return related

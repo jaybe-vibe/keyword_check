@@ -24,22 +24,10 @@ from config import (
 
 
 def _identify_content_type(url: str) -> str:
-    """URL 패턴으로 콘텐츠 소스 유형 식별
-
-    :// 프리픽스로 도메인을 정확히 구분하여 순서 무관하게 처리.
-    (kin.naver.com에 in.naver.com 부분문자열이 포함되는 문제 해결)
-    """
-    if not url:
-        return ""
-    if "blog.naver.com" in url or "post.naver.com" in url or "m.blog.naver.com" in url:
-        return "블로그"
-    if "cafe.naver.com" in url or "m.cafe.naver.com" in url:
-        return "카페"
-    if "://kin.naver.com" in url:
-        return "지식인"
-    if "://in.naver.com" in url:
-        return "인플루언서"
-    return ""
+    """URL 패턴으로 콘텐츠 소스 유형 식별 (classifier.get_content_type 위임)"""
+    from classifier import get_content_type
+    result = get_content_type(url)
+    return "" if result == "기타" else result
 
 
 def _url_to_block_type(url: str) -> BlockType:
@@ -94,7 +82,7 @@ class NaverSearchParser:
             }
         """
         self.debug_log = []
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
 
         blocks = self._extract_blocks(soup)
         related = self._extract_related_keywords(soup)

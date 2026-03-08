@@ -89,16 +89,3 @@ class KeywordResult:
     recommended_types: list[str] = field(default_factory=list)
     crawled_at: Optional[datetime] = None
     error: str = ""
-
-
-@dataclass
-class CrawlSession:
-    """크롤링 세션 상태 관리"""
-    keywords: list[str] = field(default_factory=list)
-    results: dict = field(default_factory=dict)
-    current_index: int = 0
-    status: str = "idle"  # idle, running, paused, completed, error
-    total_keywords: int = 0
-    completed_keywords: int = 0
-    started_at: Optional[datetime] = None
-    errors: list[str] = field(default_factory=list)
