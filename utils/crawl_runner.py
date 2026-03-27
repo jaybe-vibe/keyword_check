@@ -3,6 +3,7 @@
 import sys
 import asyncio
 import time
+import random
 import logging
 import traceback
 from datetime import datetime
@@ -18,10 +19,18 @@ logger = logging.getLogger(__name__)
 # 디버그 HTML 최대 보관 파일 수
 MAX_DEBUG_HTML_FILES = 100
 
+# 배치 크롤링 설정
+BATCH_SIZE = 50
+BATCH_REST_MIN = 120   # 배치 간 최소 휴식 (초) = 2분
+BATCH_REST_MAX = 180   # 배치 간 최대 휴식 (초) = 3분
+
 
 def run_crawl_thread(keywords: list[str], crawler_config: dict,
                      shared: dict, results_dict: dict):
     """백그라운드에서 크롤링 실행 (threading.Thread 대상).
+
+    50개 이상 키워드는 배치로 나눠 처리하며 배치 간 2~3분 휴식.
+    크롤링 완료 시 Excel 자동 내보내기.
 
     Args:
         shared: 스레드↔메인 통신용 일반 dict (st.session_state 대신)
@@ -44,59 +53,99 @@ def run_crawl_thread(keywords: list[str], crawler_config: dict,
     )
     parser = NaverSearchParser(debug=True)
 
+    total = len(keywords)
+    batches = [keywords[i:i + BATCH_SIZE] for i in range(0, total, BATCH_SIZE)]
+    total_batches = len(batches)
+    stopped = False
+
     try:
         crawler.start()
 
-        for i, keyword in enumerate(keywords):
+        if total >= BATCH_SIZE and total_batches > 1:
+            on_status(f"키워드 {total}개 → {BATCH_SIZE}개씩 {total_batches}배치로 나눠 크롤링합니다.")
+
+        global_idx = 0  # 전체 키워드 기준 인덱스
+
+        for batch_num, batch in enumerate(batches, 1):
             if shared["stop_signal"]:
+                stopped = True
                 on_status("크롤링 중지됨 (사용자 요청)")
                 break
 
-            while shared["pause_signal"]:
-                time.sleep(0.5)
+            if total_batches > 1:
+                on_status(f"── 배치 {batch_num}/{total_batches} 시작 ({len(batch)}개 키워드) ──")
+
+            for keyword in batch:
                 if shared["stop_signal"]:
+                    stopped = True
+                    on_status("크롤링 중지됨 (사용자 요청)")
                     break
 
-            if shared["stop_signal"]:
+                while shared["pause_signal"]:
+                    time.sleep(0.5)
+                    if shared["stop_signal"]:
+                        break
+
+                if shared["stop_signal"]:
+                    stopped = True
+                    break
+
+                shared["current"] = keyword
+                on_status(f"'{keyword}' 검색 시작")
+
+                raw = crawler.search(keyword)
+
+                if keyword not in results_dict:
+                    results_dict[keyword] = KeywordResult(keyword=keyword)
+
+                result = results_dict[keyword]
+
+                if raw["success"]:
+                    _save_debug_html(keyword, raw["html"], on_status)
+
+                    parsed = parser.parse(raw["html"])
+                    result.smart_blocks = parsed["blocks"]
+                    result.related_keywords = parsed["related_keywords"]
+                    result.crawled_at = datetime.now()
+                    result.error = ""
+
+                    block_names = [b.block_name for b in parsed["blocks"]]
+                    on_status(f"'{keyword}' 완료: 블록 {len(block_names)}개 [{', '.join(block_names)}]")
+
+                    if parsed.get("debug_log"):
+                        for log_line in parsed["debug_log"]:
+                            on_status(f"  [파서] {log_line}")
+                else:
+                    result.error = raw["error"]
+                    result.crawled_at = datetime.now()
+                    on_status(f"'{keyword}' 오류: {raw['error']}")
+
+                    if raw.get("blocked"):
+                        shared["pause_signal"] = True
+                        shared["status"] = "paused"
+                        on_status("차단 감지 - 크롤링 일시정지됨. 재개 버튼을 눌러주세요.")
+
+                global_idx += 1
+                shared["completed"] = global_idx
+                shared["progress"] = global_idx / total
+
+            if stopped:
                 break
 
-            shared["current"] = keyword
-            on_status(f"'{keyword}' 검색 시작")
-
-            raw = crawler.search(keyword)
-
-            if keyword not in results_dict:
-                results_dict[keyword] = KeywordResult(keyword=keyword)
-
-            result = results_dict[keyword]
-
-            if raw["success"]:
-                _save_debug_html(keyword, raw["html"], on_status)
-
-                parsed = parser.parse(raw["html"])
-                result.smart_blocks = parsed["blocks"]
-                result.related_keywords = parsed["related_keywords"]
-                result.crawled_at = datetime.now()
-                result.error = ""
-
-                block_names = [b.block_name for b in parsed["blocks"]]
-                on_status(f"'{keyword}' 완료: 블록 {len(block_names)}개 [{', '.join(block_names)}]")
-
-                if parsed.get("debug_log"):
-                    for log_line in parsed["debug_log"]:
-                        on_status(f"  [파서] {log_line}")
-            else:
-                result.error = raw["error"]
-                result.crawled_at = datetime.now()
-                on_status(f"'{keyword}' 오류: {raw['error']}")
-
-                if raw.get("blocked"):
-                    shared["pause_signal"] = True
-                    shared["status"] = "paused"
-                    on_status("차단 감지 - 크롤링 일시정지됨. 재개 버튼을 눌러주세요.")
-
-            shared["completed"] = i + 1
-            shared["progress"] = (i + 1) / len(keywords)
+            # 배치 간 휴식 (마지막 배치 제외)
+            if total_batches > 1 and batch_num < total_batches:
+                rest_sec = random.randint(BATCH_REST_MIN, BATCH_REST_MAX)
+                on_status(f"── 배치 {batch_num}/{total_batches} 완료. {rest_sec}초({rest_sec // 60}분 {rest_sec % 60}초) 휴식 ──")
+                # 휴식 중에도 중지/일시정지 신호 확인
+                for _ in range(rest_sec):
+                    if shared["stop_signal"]:
+                        stopped = True
+                        on_status("휴식 중 크롤링 중지됨 (사용자 요청)")
+                        break
+                    time.sleep(1)
+                if stopped:
+                    break
+                on_status(f"── 휴식 완료. 배치 {batch_num + 1}/{total_batches} 시작 준비 ──")
 
     except Exception as e:
         tb = traceback.format_exc()
@@ -107,7 +156,21 @@ def run_crawl_thread(keywords: list[str], crawler_config: dict,
         crawler.stop()
         if shared["status"] != "error" and not shared["stop_signal"]:
             shared["status"] = "completed"
+            # 크롤링 정상 완료 시 Excel 자동 내보내기
+            _auto_export(results_dict, on_status)
         shared["current"] = ""
+
+
+def _auto_export(results_dict: dict, on_status):
+    """크롤링 완료 후 Excel 자동 내보내기"""
+    try:
+        from pages.export import auto_export_excel
+        on_status("Excel 자동 내보내기 시작...")
+        output_path = auto_export_excel(results_dict)
+        on_status(f"Excel 저장 완료: {output_path}")
+    except Exception as e:
+        logger.error("Excel 자동 내보내기 실패: %s", e)
+        on_status(f"Excel 자동 내보내기 실패: {e}")
 
 
 def _save_debug_html(keyword: str, html: str, on_status):

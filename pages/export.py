@@ -9,6 +9,26 @@ from config import PROJECT_ROOT
 from excel_manager import ExcelReportGenerator
 
 
+def get_output_dir() -> Path:
+    """Excel 출력 디렉토리 결정 (Z: 우선, 없으면 Y:)"""
+    z_path = Path(r"Z:\docker\keyword_check\output")
+    y_path = Path(r"Y:\docker\keyword_check\output")
+    if z_path.exists() or z_path.parent.exists():
+        return z_path
+    return y_path
+
+
+def auto_export_excel(results_dict: dict) -> str:
+    """크롤링 완료 후 자동 Excel 내보내기. 저장된 파일 경로 반환."""
+    generator = ExcelReportGenerator()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = get_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = str(output_dir / f"keyword_analysis_{timestamp}.xlsx")
+    generator.generate(results_dict, output_path)
+    return output_path
+
+
 def render():
     st.header("📥 Excel 내보내기")
 
@@ -32,19 +52,7 @@ def render():
 
     if st.button("📥 Excel 파일 생성", type="primary"):
         with st.spinner("Excel 파일 생성 중..."):
-            generator = ExcelReportGenerator()
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # 외부 출력 경로 (Z: 우선, 없으면 Y:)
-            z_path = Path(r"Z:\docker\keyword_check\output")
-            y_path = Path(r"Y:\docker\keyword_check\output")
-            if z_path.exists() or z_path.parent.exists():
-                output_dir = z_path
-            else:
-                output_dir = y_path
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_path = str(output_dir / f"keyword_analysis_{timestamp}.xlsx")
-
-            generator.generate(st.session_state.results, output_path)
+            output_path = auto_export_excel(st.session_state.results)
 
         st.success(f"Excel 파일 생성 완료: {Path(output_path).name}")
 
