@@ -34,7 +34,13 @@ def render():
         with st.spinner("Excel 파일 생성 중..."):
             generator = ExcelReportGenerator()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = PROJECT_ROOT / st.session_state.config.get("output_dir", "data")
+            # 외부 출력 경로 (Z: 우선, 없으면 Y:)
+            z_path = Path(r"Z:\docker\keyword_check\output")
+            y_path = Path(r"Y:\docker\keyword_check\output")
+            if z_path.exists() or z_path.parent.exists():
+                output_dir = z_path
+            else:
+                output_dir = y_path
             output_dir.mkdir(parents=True, exist_ok=True)
             output_path = str(output_dir / f"keyword_analysis_{timestamp}.xlsx")
 
