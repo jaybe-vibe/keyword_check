@@ -22,14 +22,13 @@ def render():
         st.warning("🌐 네이버 크롤링을 먼저 실행해주세요.")
         return
 
-    # 캐싱된 분류 결과 사용
-    if "cached_analyses" not in st.session_state:
-        st.session_state.cached_analyses = classify_all(st.session_state.results)
-    analyses = st.session_state.cached_analyses
+    # 분류 결과 (매번 재계산하여 크롤링 후 갱신 보장)
+    analyses = classify_all(st.session_state.results)
+    st.session_state.cached_analyses = analyses
 
     by_type = get_keywords_by_type(st.session_state.results, analyses)
 
-    icons = {"블로그": "📝", "카페": "☕", "인플루언서": "⭐", "지식인": "❓"}
+    icons = {"블로그": "📝", "카페": "☕", "맘스홀릭": "🤰", "인플루언서": "⭐", "지식인": "❓"}
 
     for ctype in TARGET_TYPES:
         kw_list = by_type.get(ctype, [])
@@ -63,14 +62,15 @@ def render():
         result = st.session_state.results.get(kw)
         if isinstance(result, KeywordResult) and result.crawled_at:
             analysis = analyses.get(kw, {})
-            tc = analysis.get("type_counts", {"블로그": 0, "카페": 0, "인플루언서": 0, "지식인": 0})
+            tc = analysis.get("type_counts", {"블로그": 0, "카페": 0, "맘스홀릭": 0, "인플루언서": 0, "지식인": 0})
             class_data.append({
                 "키워드": kw,
                 "추천유형": result.classification or "-",
-                "블로그": tc["블로그"],
-                "카페": tc["카페"],
-                "인플루언서": tc["인플루언서"],
-                "지식인": tc["지식인"],
+                "블로그": tc.get("블로그", 0),
+                "카페": tc.get("카페", 0),
+                "맘스홀릭": tc.get("맘스홀릭", 0),
+                "인플루언서": tc.get("인플루언서", 0),
+                "지식인": tc.get("지식인", 0),
                 "총 검색량": result.search_volume_total,
             })
     if class_data:

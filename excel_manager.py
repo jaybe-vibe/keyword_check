@@ -16,7 +16,7 @@ from openpyxl.utils import get_column_letter
 
 from models import KeywordResult, BlockType, EXCLUDED_BLOCKS
 from classifier import (
-    analyze_keyword, get_content_type, is_recent,
+    analyze_keyword, get_content_type, is_recent, is_momsholic,
 )
 
 
@@ -113,7 +113,7 @@ class ExcelReportGenerator:
         ws = self.wb.create_sheet("상세 콘텐츠")
 
         headers = [
-            "키워드", "유형", "추천유형", "블록 이름", "순위",
+            "키워드", "유형", "맘스홀릭", "추천유형", "블록 이름", "순위",
             "제목", "URL", "출처", "날짜", "추천",
         ]
         self._write_header_row(ws, headers)
@@ -140,6 +140,7 @@ class ExcelReportGenerator:
 
                     # URL 기반 유형 분류
                     content_type = get_content_type(item.url)
+                    momsholic_flag = "O" if content_type == "카페" and is_momsholic(item.url) else ""
 
                     # 날짜 기반 추천
                     recent = is_recent(item.date)
@@ -147,16 +148,17 @@ class ExcelReportGenerator:
 
                     ws.cell(row=row_idx, column=1, value=keyword)
                     ws.cell(row=row_idx, column=2, value=content_type)
-                    ws.cell(row=row_idx, column=3, value=recommended_label)
-                    ws.cell(row=row_idx, column=4, value=block_display)
-                    ws.cell(row=row_idx, column=5, value=global_rank)
-                    ws.cell(row=row_idx, column=6, value=item.title)
-                    ws.cell(row=row_idx, column=7, value=item.url)
-                    ws.cell(row=row_idx, column=8, value=item.source)
-                    ws.cell(row=row_idx, column=9, value=item.date)
+                    ws.cell(row=row_idx, column=3, value=momsholic_flag)
+                    ws.cell(row=row_idx, column=4, value=recommended_label)
+                    ws.cell(row=row_idx, column=5, value=block_display)
+                    ws.cell(row=row_idx, column=6, value=global_rank)
+                    ws.cell(row=row_idx, column=7, value=item.title)
+                    ws.cell(row=row_idx, column=8, value=item.url)
+                    ws.cell(row=row_idx, column=9, value=item.source)
+                    ws.cell(row=row_idx, column=10, value=item.date)
 
                     # 추천 셀 색상
-                    rec_cell = ws.cell(row=row_idx, column=10, value=recommend)
+                    rec_cell = ws.cell(row=row_idx, column=11, value=recommend)
                     if recent is True:
                         rec_cell.fill = RECOMMEND_FILL
                     elif recent is False:

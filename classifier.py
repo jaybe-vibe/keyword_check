@@ -14,7 +14,16 @@ from datetime import datetime, timedelta
 from models import KeywordResult, BlockType, EXCLUDED_BLOCKS
 
 
-TARGET_TYPES = ["블로그", "카페", "인플루언서", "지식인"]
+TARGET_TYPES = ["블로그", "카페", "인플루언서", "지식인", "맘스홀릭"]
+
+MOMSHOLIC_CAFE_URL = "cafe.naver.com/imsanbu/"
+
+
+def is_momsholic(url: str) -> bool:
+    """URL이 맘스홀릭(임산부 카페) 콘텐츠인지 판별"""
+    if not url:
+        return False
+    return MOMSHOLIC_CAFE_URL in url
 
 
 def get_content_type(url: str) -> str:
@@ -109,6 +118,9 @@ def analyze_keyword(result: KeywordResult) -> dict:
         if content_type not in TARGET_TYPES:
             continue
         type_counts[content_type] += 1
+        # 맘스홀릭: 카페 중 imsanbu 카페이면 중복 카운팅
+        if content_type == "카페" and is_momsholic(item.url):
+            type_counts["맘스홀릭"] += 1
         if content_type == "지식인":
             # 지식인은 날짜 무시 → recent count = total count
             type_recent_counts[content_type] += 1
@@ -116,12 +128,19 @@ def analyze_keyword(result: KeywordResult) -> dict:
             recent = is_recent(item.date)
             if recent is True:
                 type_recent_counts[content_type] += 1
+                # 맘스홀릭도 recent 카운팅
+                if content_type == "카페" and is_momsholic(item.url):
+                    type_recent_counts["맘스홀릭"] += 1
 
     # 추천 유형 결정
     recommended = []
     for ctype in TARGET_TYPES:
         if ctype == "지식인":
             if type_counts[ctype] >= 2:
+                recommended.append(ctype)
+        elif ctype == "맘스홀릭":
+            # 맘스홀릭: 1개 이상이면 추천 (특정 카페이므로 낮은 임계값)
+            if type_counts[ctype] >= 1:
                 recommended.append(ctype)
         else:
             if type_recent_counts[ctype] >= 3:

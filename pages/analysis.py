@@ -5,7 +5,7 @@ import pandas as pd
 
 from classifier import (
     classify_all, analyze_keyword, get_content_type, is_recent,
-    get_top10_items, TARGET_TYPES,
+    get_top10_items, TARGET_TYPES, is_momsholic,
 )
 from utils.keyword_utils import get_crawled_results, is_duplicate_keyword, add_keywords
 
@@ -31,10 +31,10 @@ def render():
 
 
 def _get_cached_analyses() -> dict:
-    """classify_all 결과 캐싱"""
-    if "cached_analyses" not in st.session_state:
-        st.session_state.cached_analyses = classify_all(st.session_state.results)
-    return st.session_state.cached_analyses
+    """classify_all 결과 (매번 재계산하여 크롤링 후 갱신 보장)"""
+    analyses = classify_all(st.session_state.results)
+    st.session_state.cached_analyses = analyses
+    return analyses
 
 
 def _render_type_analysis(crawled_results, analyses):
@@ -54,6 +54,7 @@ def _render_type_analysis(crawled_results, analyses):
             "키워드": kw,
             "블로그": f"{tc['블로그']} ({trc['블로그']}추천)" if tc["블로그"] > 0 else "0",
             "카페": f"{tc['카페']} ({trc['카페']}추천)" if tc["카페"] > 0 else "0",
+            "맘스홀릭": str(tc.get("맘스홀릭", 0)),
             "인플루언서": f"{tc['인플루언서']} ({trc['인플루언서']}추천)" if tc["인플루언서"] > 0 else "0",
             "지식인": str(tc["지식인"]),
             "추천유형": "/".join(analysis["recommended_types"]) if analysis["recommended_types"] else "-",
@@ -75,11 +76,13 @@ def _render_keyword_detail(crawled_results, analyses):
 
     tc = analysis["type_counts"]
     trc = analysis["type_recent_counts"]
-    icons = {"블로그": "📝", "카페": "☕", "인플루언서": "⭐", "지식인": "❓"}
-    cols = st.columns(4)
+    icons = {"블로그": "📝", "카페": "☕", "맘스홀릭": "🤰", "인플루언서": "⭐", "지식인": "❓"}
+    cols = st.columns(5)
     for col, ctype in zip(cols, TARGET_TYPES):
         if ctype == "지식인":
             label = f"{tc[ctype]}개"
+        elif ctype == "맘스홀릭":
+            label = f"{tc.get(ctype, 0)}개"
         else:
             label = f"{tc[ctype]}개 (추천 {trc[ctype]})"
         col.metric(f"{icons[ctype]} {ctype}", label)
@@ -94,6 +97,9 @@ def _render_keyword_detail(crawled_results, analyses):
         detail_data = []
         for rank, item in enumerate(top10, 1):
             ctype = get_content_type(item.url)
+            # 맘스홀릭이면 유형에 표시
+            if ctype == "카페" and is_momsholic(item.url):
+                ctype = "카페(맘스홀릭)"
             recent = is_recent(item.date)
             detail_data.append({
                 "순위": rank,
