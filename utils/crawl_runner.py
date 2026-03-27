@@ -19,10 +19,11 @@ logger = logging.getLogger(__name__)
 # 디버그 HTML 최대 보관 파일 수
 MAX_DEBUG_HTML_FILES = 100
 
-# 배치 크롤링 설정
-BATCH_SIZE = 50
-BATCH_REST_MIN = 120   # 배치 간 최소 휴식 (초) = 2분
-BATCH_REST_MAX = 180   # 배치 간 최대 휴식 (초) = 3분
+# 배치 크롤링 설정 (안티봇 최적화)
+BATCH_SIZE_MIN = 25    # 배치 크기 최소
+BATCH_SIZE_MAX = 35    # 배치 크기 최대 (랜덤화)
+BATCH_REST_MIN = 300   # 배치 간 최소 휴식 (초) = 5분
+BATCH_REST_MAX = 600   # 배치 간 최대 휴식 (초) = 10분
 
 
 def run_crawl_thread(keywords: list[str], crawler_config: dict,
@@ -46,23 +47,25 @@ def run_crawl_thread(keywords: list[str], crawler_config: dict,
 
     crawler = NaverCrawler(
         headed=crawler_config.get("headed", True),
-        min_delay=crawler_config.get("min_delay", 3.0),
-        max_delay=crawler_config.get("max_delay", 8.0),
+        min_delay=crawler_config.get("min_delay", 5.0),
+        max_delay=crawler_config.get("max_delay", 12.0),
         context_rotation_interval=crawler_config.get("context_rotation_interval", 12),
         on_status=on_status,
     )
     parser = NaverSearchParser(debug=True)
 
     total = len(keywords)
-    batches = [keywords[i:i + BATCH_SIZE] for i in range(0, total, BATCH_SIZE)]
+    # 배치 크기 랜덤화 (25~35개)
+    batch_size = random.randint(BATCH_SIZE_MIN, BATCH_SIZE_MAX)
+    batches = [keywords[i:i + batch_size] for i in range(0, total, batch_size)]
     total_batches = len(batches)
     stopped = False
 
     try:
         crawler.start()
 
-        if total >= BATCH_SIZE and total_batches > 1:
-            on_status(f"키워드 {total}개 → {BATCH_SIZE}개씩 {total_batches}배치로 나눠 크롤링합니다.")
+        if total_batches > 1:
+            on_status(f"키워드 {total}개 → {batch_size}개씩 {total_batches}배치로 나눠 크롤링합니다.")
 
         global_idx = 0  # 전체 키워드 기준 인덱스
 

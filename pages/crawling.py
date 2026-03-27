@@ -23,12 +23,12 @@ def render():
         col1, col2, col3 = st.columns(3)
         with col1:
             min_delay = st.number_input(
-                "최소 딜레이(초)", value=float(config.get("min_delay", 3.0)),
+                "최소 딜레이(초)", value=float(config.get("min_delay", 5.0)),
                 min_value=1.0, max_value=30.0, step=0.5,
             )
         with col2:
             max_delay = st.number_input(
-                "최대 딜레이(초)", value=float(config.get("max_delay", 8.0)),
+                "최대 딜레이(초)", value=float(config.get("max_delay", 12.0)),
                 min_value=2.0, max_value=60.0, step=0.5,
             )
         with col3:
