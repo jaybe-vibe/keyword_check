@@ -29,11 +29,22 @@ def auto_export_excel(results_dict: dict) -> str:
     return output_path
 
 
+def _get_export_results() -> dict:
+    """내보내기 대상 results 딕셔너리 반환 (크롤링 대상 키워드 기준 필터링)"""
+    all_results = st.session_state.results
+    target_kws = st.session_state.crawl_shared.get("target_keywords")
+    if target_kws:
+        target_set = set(target_kws)
+        return {kw: r for kw, r in all_results.items() if kw in target_set}
+    return all_results
+
+
 def render():
     st.header("📥 Excel 내보내기")
 
+    export_results = _get_export_results()
     crawled_count = sum(
-        1 for r in st.session_state.results.values()
+        1 for r in export_results.values()
         if isinstance(r, KeywordResult) and r.crawled_at
     )
 
@@ -41,7 +52,11 @@ def render():
         st.warning("분석된 키워드가 없습니다. 먼저 크롤링을 실행해주세요.")
         return
 
-    st.info(f"내보내기 대상: {crawled_count}개 키워드")
+    total_kw = len(st.session_state.keywords)
+    if crawled_count < total_kw:
+        st.info(f"내보내기 대상: {crawled_count}개 키워드 (전체 {total_kw}개 중)")
+    else:
+        st.info(f"내보내기 대상: {crawled_count}개 키워드")
 
     st.markdown("""
     **포함 시트:**
@@ -52,7 +67,7 @@ def render():
 
     if st.button("📥 Excel 파일 생성", type="primary"):
         with st.spinner("Excel 파일 생성 중..."):
-            output_path = auto_export_excel(st.session_state.results)
+            output_path = auto_export_excel(export_results)
 
         st.success(f"Excel 파일 생성 완료: {Path(output_path).name}")
 

@@ -68,6 +68,7 @@ def _render_controls(shared, headed, min_delay, max_delay, rotation, target_keyw
             shared["pause_signal"] = False
             shared["current"] = ""
             shared["total"] = len(target_keywords)
+            shared["target_keywords"] = list(target_keywords)
 
             thread = threading.Thread(
                 target=run_crawl_thread,

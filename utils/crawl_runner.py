@@ -159,8 +159,14 @@ def run_crawl_thread(keywords: list[str], crawler_config: dict,
         crawler.stop()
         if shared["status"] != "error" and not shared["stop_signal"]:
             shared["status"] = "completed"
-            # 크롤링 정상 완료 시 Excel 자동 내보내기
-            _auto_export(results_dict, on_status)
+            # 크롤링 정상 완료 시 Excel 자동 내보내기 (대상 키워드만)
+            target_kws = shared.get("target_keywords")
+            if target_kws:
+                target_set = set(target_kws)
+                export_dict = {kw: r for kw, r in results_dict.items() if kw in target_set}
+            else:
+                export_dict = results_dict
+            _auto_export(export_dict, on_status)
         shared["current"] = ""
 
 
