@@ -34,31 +34,16 @@ def render():
 
     config = st.session_state.config
 
-    with st.expander("크롤링 옵션", expanded=False):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            min_delay = st.number_input(
-                "최소 딜레이(초)", value=float(config.get("min_delay", 5.0)),
-                min_value=1.0, max_value=30.0, step=0.5,
-            )
-        with col2:
-            max_delay = st.number_input(
-                "최대 딜레이(초)", value=float(config.get("max_delay", 12.0)),
-                min_value=2.0, max_value=60.0, step=0.5,
-            )
-        with col3:
-            rotation = st.number_input(
-                "컨텍스트 교체 간격", value=int(config.get("context_rotation_interval", 12)),
-                min_value=5, max_value=50, step=1,
-            )
-        headed = st.checkbox(
-            "브라우저 화면 표시 (Headed 모드)",
-            value=config.get("headed", True),
-        )
-
     shared = st.session_state.crawl_shared
 
-    _render_controls(shared, headed, min_delay, max_delay, rotation, target_keywords)
+    _render_controls(
+        shared,
+        config.get("headed", False),
+        float(config.get("min_delay", 5.0)),
+        float(config.get("max_delay", 12.0)),
+        int(config.get("context_rotation_interval", 12)),
+        target_keywords,
+    )
 
     st.divider()
     _render_progress(shared)

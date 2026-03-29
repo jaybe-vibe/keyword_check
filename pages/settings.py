@@ -56,7 +56,7 @@ def render():
         )
         draft_headed = st.checkbox(
             "브라우저 화면 표시 (Headed 모드)",
-            value=config.get("headed", True),
+            value=config.get("headed", False),
             key="settings_headed",
         )
 

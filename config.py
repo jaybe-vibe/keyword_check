@@ -24,7 +24,7 @@ DEFAULT_CONFIG = {
     "context_rotation_interval": 12,
     "scroll_delay": 1.5,
     "page_load_timeout": 15000,
-    "headed": True,
+    "headed": False,
     "output_dir": "data",
 }
 
