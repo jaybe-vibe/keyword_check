@@ -36,6 +36,7 @@ def init_session_state():
         "config": load_config(),
         "keywords": [],
         "results": {},
+        "filtered_keywords": [],
         "crawl_shared": {
             "status": "idle",
             "progress": 0.0,

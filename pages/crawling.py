@@ -15,7 +15,22 @@ def render():
         st.warning("📋 키워드 관리 페이지에서 먼저 키워드를 입력해주세요.")
         return
 
-    st.info(f"분석 대상: {len(st.session_state.keywords)}개 키워드")
+    # 크롤링 대상 키워드 선택 (전체 vs 필터된 키워드)
+    filtered = st.session_state.get("filtered_keywords", [])
+    all_kws = st.session_state.keywords
+    has_active_filter = filtered and len(filtered) < len(all_kws)
+
+    if has_active_filter:
+        crawl_mode = st.radio(
+            "크롤링 대상",
+            [f"전체 키워드 ({len(all_kws)}개)", f"필터된 키워드 ({len(filtered)}개)"],
+            horizontal=True,
+        )
+        target_keywords = filtered if "필터" in crawl_mode else all_kws
+    else:
+        target_keywords = all_kws
+
+    st.info(f"분석 대상: {len(target_keywords)}개 키워드")
 
     config = st.session_state.config
 
@@ -43,7 +58,7 @@ def render():
 
     shared = st.session_state.crawl_shared
 
-    _render_controls(shared, headed, min_delay, max_delay, rotation)
+    _render_controls(shared, headed, min_delay, max_delay, rotation, target_keywords)
 
     st.divider()
     _render_progress(shared)
@@ -53,7 +68,7 @@ def render():
     _render_results_summary()
 
 
-def _render_controls(shared, headed, min_delay, max_delay, rotation):
+def _render_controls(shared, headed, min_delay, max_delay, rotation, target_keywords):
     """크롤링 제어 버튼"""
     col1, col2, col3, col4 = st.columns(4)
 
@@ -67,11 +82,12 @@ def _render_controls(shared, headed, min_delay, max_delay, rotation):
             shared["stop_signal"] = False
             shared["pause_signal"] = False
             shared["current"] = ""
+            shared["total"] = len(target_keywords)
 
             thread = threading.Thread(
                 target=run_crawl_thread,
                 args=(
-                    list(st.session_state.keywords),
+                    list(target_keywords),
                     {
                         "headed": headed,
                         "min_delay": min_delay,
@@ -105,7 +121,7 @@ def _render_controls(shared, headed, min_delay, max_delay, rotation):
 def _render_progress(shared):
     """진행 상태 표시"""
     if shared["status"] in ("running", "paused"):
-        total = len(st.session_state.keywords)
+        total = shared.get("total", len(st.session_state.keywords))
         completed = shared["completed"]
         progress = completed / total if total > 0 else 0
 
@@ -125,7 +141,7 @@ def _render_progress(shared):
     elif shared["status"] == "completed":
         st.success("크롤링 완료!")
         completed = shared["completed"]
-        total = len(st.session_state.keywords)
+        total = shared.get("total", len(st.session_state.keywords))
         errors = sum(
             1 for r in st.session_state.results.values()
             if isinstance(r, KeywordResult) and r.error

@@ -102,6 +102,7 @@ def _render_keyword_list():
             if result.avg_mobile_clicks < min_clicks:
                 continue
             kw_data.append({
+                "선택": False,
                 "키워드": kw,
                 "PC": result.search_volume_pc,
                 "모바일": result.search_volume_mobile,
@@ -121,6 +122,7 @@ def _render_keyword_list():
             if min_total > 0 or min_clicks > 0:
                 continue
             kw_data.append({
+                "선택": False,
                 "키워드": kw,
                 "PC": 0, "모바일": 0, "합계": 0,
                 "경쟁도": "",
@@ -130,33 +132,42 @@ def _render_keyword_list():
                 "분류": "", "크롤링": "",
             })
 
+    # 필터된 키워드 목록을 세션에 저장 (크롤링 페이지에서 사용)
+    st.session_state.filtered_keywords = [d["키워드"] for d in kw_data]
+
     df = pd.DataFrame(kw_data)
-    st.dataframe(
+    if df.empty:
+        st.info("필터 조건에 맞는 키워드가 없습니다.")
+        return
+
+    edited_df = st.data_editor(
         df, use_container_width=True, hide_index=True,
-        column_config=VOLUME_COLUMN_CONFIG,
+        disabled=[c for c in df.columns if c != "선택"],
+        column_config={
+            "선택": st.column_config.CheckboxColumn("선택", default=False),
+            **VOLUME_COLUMN_CONFIG,
+        },
+        key="kw_list_editor",
     )
     st.caption(f"필터 결과: {len(kw_data)}개 / 전체 {len(st.session_state.keywords)}개")
 
-    # 키워드 삭제
+    # 키워드 삭제 (체크박스로 선택된 키워드)
+    selected_kws = edited_df[edited_df["선택"]]["키워드"].tolist()
     col1, col2 = st.columns(2)
     with col1:
-        kw_to_delete = st.multiselect("삭제할 키워드 선택", st.session_state.keywords)
-    with col2:
-        st.write("")
-        st.write("")
-        if st.button("🗑️ 선택 키워드 삭제") and kw_to_delete:
-            for kw in kw_to_delete:
+        if st.button("🗑️ 선택 키워드 삭제", disabled=not selected_kws):
+            for kw in selected_kws:
                 st.session_state.keywords.remove(kw)
                 st.session_state.results.pop(kw, None)
-            st.success(f"{len(kw_to_delete)}개 키워드 삭제됨")
+            st.success(f"{len(selected_kws)}개 키워드 삭제됨")
             st.rerun()
-
-    if st.button("🗑️ 전체 키워드 초기화", type="secondary"):
-        st.session_state.keywords = []
-        st.session_state.results = {}
-        st.session_state.classified = False
-        st.session_state.api_related_keywords = {}
-        st.rerun()
+    with col2:
+        if st.button("🗑️ 전체 키워드 초기화", type="secondary"):
+            st.session_state.keywords = []
+            st.session_state.results = {}
+            st.session_state.classified = False
+            st.session_state.api_related_keywords = {}
+            st.rerun()
 
 
 def _render_volume_search():
