@@ -70,6 +70,11 @@ PAGE_MAP = {
     "⚙️ 설정": settings.render,
 }
 
+st.markdown(
+    "<style>[data-testid='stSidebarNav'] { display: none; }</style>",
+    unsafe_allow_html=True,
+)
+
 with st.sidebar:
     st.title("🔍 키워드 분석")
     st.caption("네이버 검색결과 스마트블록 분석 도구")
@@ -83,9 +88,14 @@ with st.sidebar:
         1 for r in st.session_state.results.values()
         if isinstance(r, KeywordResult) and r.crawled_at
     )
-    st.caption(f"키워드: {kw_count}개 | 분석완료: {result_count}개")
 
     crawl_shared = st.session_state.crawl_shared
+    crawl_total = crawl_shared.get("total", kw_count)
+    if crawl_shared["status"] in ("running", "paused") and crawl_total < kw_count:
+        st.caption(f"키워드: {kw_count}개 (크롤링 대상: {crawl_total}개) | 분석완료: {result_count}개")
+    else:
+        st.caption(f"키워드: {kw_count}개 | 분석완료: {result_count}개")
+
     if crawl_shared["status"] == "running":
         st.info(f"크롤링 중: {crawl_shared['current']}")
     elif crawl_shared["status"] == "paused":
