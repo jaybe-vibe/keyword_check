@@ -114,10 +114,22 @@ def _render_keyword_detail(crawled_results, analyses):
             column_config={"순위": st.column_config.NumberColumn(width="small")},
         )
 
-    if result.related_keywords:
+    # 연관키워드 표시 (API dict 또는 HTML str 모두 대응)
+    display_related = []
+    for rk in result.related_keywords:
+        if isinstance(rk, dict):
+            display_related.append(rk.get("keyword", ""))
+        elif isinstance(rk, str):
+            display_related.append(rk)
+    if not display_related:
+        display_related = list(result.related_keywords_html)
+
+    if display_related:
         st.subheader("함께 많이 찾는 키워드")
-        cols = st.columns(min(len(result.related_keywords), 4))
-        for i, rk in enumerate(result.related_keywords):
+        cols = st.columns(min(len(display_related), 4))
+        for i, rk in enumerate(display_related):
+            if not rk:
+                continue
             with cols[i % len(cols)]:
                 already_in = is_duplicate_keyword(rk, st.session_state.keywords)
                 if already_in:

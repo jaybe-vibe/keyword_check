@@ -160,7 +160,7 @@ def _render_results_summary():
                 "키워드": kw,
                 "스마트블록": ", ".join(block_names) if block_names else "-",
                 "블록 수": len(result.smart_blocks),
-                "연관키워드": len(result.related_keywords),
+                "연관키워드": len(result.related_keywords) or len(result.related_keywords_html),
                 "오류": result.error or "-",
             })
 

@@ -169,3 +169,30 @@ class NaverAdsAPIClient:
             related.append(vol_data)
 
         return related
+
+    def get_related_keywords_batch(
+        self,
+        keywords: list[str],
+        batch_size: int = 5,
+        delay: float = 0.5,
+    ) -> dict:
+        """여러 키워드의 연관키워드를 배치로 조회.
+
+        Returns:
+            {keyword: [related_kw_dict, ...]} 딕셔너리
+        """
+        results = {}
+        for i in range(0, len(keywords), batch_size):
+            batch = keywords[i : i + batch_size]
+            for keyword in batch:
+                try:
+                    related = self.get_related_keywords(keyword)
+                    results[keyword] = related
+                except Exception as e:
+                    logger.warning("연관키워드 배치 조회 실패 (%s): %s", keyword, e)
+                    results[keyword] = []
+
+            if i + batch_size < len(keywords):
+                time.sleep(delay)
+
+        return results

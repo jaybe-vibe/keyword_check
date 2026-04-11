@@ -4,7 +4,7 @@ Excel 리포트 생성기 - openpyxl 기반
 3개 시트:
 1. 키워드 목록 - 키워드별 검색량, 경쟁도, 분류
 2. 상세 콘텐츠 - 키워드/블록별 개별 콘텐츠 (유형, 추천유형, 추천)
-3. 연관 키워드 - 함께 많이 찾는 연관검색어
+3. 연관 키워드 - API 연관키워드 + 검색량/경쟁도
 """
 
 import re
@@ -170,10 +170,13 @@ class ExcelReportGenerator:
         self._auto_fit_columns(ws)
 
     def _create_related_sheet(self, results: dict):
-        """시트3: 연관 키워드 (함께 많이 찾는)"""
+        """시트3: 연관 키워드 (API 연관키워드 + 검색량)"""
         ws = self.wb.create_sheet("연관 키워드")
 
-        headers = ["원본 키워드", "연관 키워드"]
+        headers = [
+            "원본 키워드", "연관 키워드",
+            "PC 검색량", "모바일 검색량", "총 검색량", "경쟁도",
+        ]
         self._write_header_row(ws, headers)
 
         row_idx = 2
@@ -181,9 +184,19 @@ class ExcelReportGenerator:
             if not isinstance(result, KeywordResult):
                 continue
             for related in result.related_keywords:
-                ws.cell(row=row_idx, column=1, value=keyword)
-                ws.cell(row=row_idx, column=2, value=related)
-                row_idx += 1
+                if isinstance(related, dict):
+                    ws.cell(row=row_idx, column=1, value=keyword)
+                    ws.cell(row=row_idx, column=2, value=related.get("keyword", ""))
+                    ws.cell(row=row_idx, column=3, value=related.get("pc", 0))
+                    ws.cell(row=row_idx, column=4, value=related.get("mobile", 0))
+                    ws.cell(row=row_idx, column=5, value=related.get("total", 0))
+                    ws.cell(row=row_idx, column=6, value=related.get("competition", ""))
+                    row_idx += 1
+                elif isinstance(related, str) and related:
+                    # 하위호환: 기존 list[str] 형태 데이터
+                    ws.cell(row=row_idx, column=1, value=keyword)
+                    ws.cell(row=row_idx, column=2, value=related)
+                    row_idx += 1
 
         self._auto_fit_columns(ws)
 

@@ -13,6 +13,7 @@ from crawler import NaverCrawler
 from parser import NaverSearchParser
 from models import KeywordResult
 from utils.keyword_utils import sanitize_filename
+from config import get_naver_ads_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ def run_crawl_thread(keywords: list[str], crawler_config: dict,
 
                     parsed = parser.parse(raw["html"])
                     result.smart_blocks = parsed["blocks"]
-                    result.related_keywords = parsed["related_keywords"]
+                    result.related_keywords_html = parsed["related_keywords"]
                     result.crawled_at = datetime.now()
                     result.error = ""
 
@@ -159,15 +160,56 @@ def run_crawl_thread(keywords: list[str], crawler_config: dict,
         crawler.stop()
         if shared["status"] != "error" and not shared["stop_signal"]:
             shared["status"] = "completed"
-            # 크롤링 정상 완료 시 Excel 자동 내보내기 (대상 키워드만)
+            # 크롤링 정상 완료 시 API 연관키워드 조회 + Excel 자동 내보내기
             target_kws = shared.get("target_keywords")
             if target_kws:
                 target_set = set(target_kws)
                 export_dict = {kw: r for kw, r in results_dict.items() if kw in target_set}
             else:
                 export_dict = results_dict
+            _fetch_related_keywords(export_dict, on_status)
             _auto_export(export_dict, on_status)
         shared["current"] = ""
+
+
+def _fetch_related_keywords(results_dict: dict, on_status):
+    """크롤링 완료 후 네이버 검색광고 API로 연관키워드 자동 조회"""
+    creds = get_naver_ads_credentials()
+    if not all(creds):
+        on_status("API 키 미설정 — 연관키워드 API 조회 건너뜀 (HTML 파싱 결과만 사용)")
+        # API 키 없으면 HTML 파싱 결과를 dict 형태로 변환하여 fallback
+        for keyword, result in results_dict.items():
+            if isinstance(result, KeywordResult) and not result.related_keywords:
+                result.related_keywords = [
+                    {"keyword": rk, "pc": 0, "mobile": 0, "total": 0, "competition": ""}
+                    for rk in result.related_keywords_html
+                ]
+        return
+
+    try:
+        from keyword_api import NaverAdsAPIClient
+        client = NaverAdsAPIClient(*creds)
+        keywords = [kw for kw, r in results_dict.items()
+                    if isinstance(r, KeywordResult) and r.crawled_at]
+
+        on_status(f"연관키워드 API 조회 시작 ({len(keywords)}개 키워드)...")
+        related_map = client.get_related_keywords_batch(keywords, batch_size=5, delay=0.5)
+
+        for keyword, related_list in related_map.items():
+            if keyword in results_dict and isinstance(results_dict[keyword], KeywordResult):
+                results_dict[keyword].related_keywords = related_list
+
+        total_related = sum(len(v) for v in related_map.values())
+        on_status(f"연관키워드 API 조회 완료: {len(related_map)}개 키워드 → 총 {total_related}개 연관키워드")
+    except Exception as e:
+        logger.error("연관키워드 API 조회 실패: %s", e)
+        on_status(f"연관키워드 API 조회 실패: {e} (HTML 파싱 결과 사용)")
+        for keyword, result in results_dict.items():
+            if isinstance(result, KeywordResult) and not result.related_keywords:
+                result.related_keywords = [
+                    {"keyword": rk, "pc": 0, "mobile": 0, "total": 0, "competition": ""}
+                    for rk in result.related_keywords_html
+                ]
 
 
 def _auto_export(results_dict: dict, on_status):

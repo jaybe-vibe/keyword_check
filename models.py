@@ -84,7 +84,8 @@ class KeywordResult:
     # 월평균 노출 광고수
     avg_ad_count: float = 0.0
     smart_blocks: list[SmartBlock] = field(default_factory=list)
-    related_keywords: list[str] = field(default_factory=list)
+    related_keywords: list[dict] = field(default_factory=list)  # API 연관키워드 [{keyword, pc, mobile, total, competition, ...}]
+    related_keywords_html: list[str] = field(default_factory=list)  # HTML 파싱 연관키워드 (보조)
     classification: str = ""
     recommended_types: list[str] = field(default_factory=list)
     crawled_at: Optional[datetime] = None
