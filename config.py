@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
     "page_load_timeout": 15000,
     "headed": False,
     "output_dir": "data",
+    "min_related_volume": 1000,
 }
 
 

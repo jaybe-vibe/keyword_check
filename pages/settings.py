@@ -60,12 +60,21 @@ def render():
             key="settings_headed",
         )
 
+    draft_min_related_volume = st.number_input(
+        "연관키워드 최소 총검색량",
+        value=int(config.get("min_related_volume", 1000)),
+        min_value=0, max_value=100000, step=100,
+        help="크롤링 후 연관키워드 중 총검색량이 이 값 미만인 키워드를 자동 제외합니다. 0이면 필터 없음.",
+        key="settings_min_related_volume",
+    )
+
     if st.button("💾 설정 저장"):
         updated_config = config.copy()
         updated_config["min_delay"] = draft_min_delay
         updated_config["max_delay"] = draft_max_delay
         updated_config["context_rotation_interval"] = draft_rotation
         updated_config["headed"] = draft_headed
+        updated_config["min_related_volume"] = draft_min_related_volume
         save_config(updated_config)
         st.session_state.config = updated_config
         st.success("설정이 저장되었습니다.")

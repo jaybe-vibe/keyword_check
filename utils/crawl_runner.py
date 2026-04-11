@@ -13,7 +13,7 @@ from crawler import NaverCrawler
 from parser import NaverSearchParser
 from models import KeywordResult
 from utils.keyword_utils import sanitize_filename
-from config import get_naver_ads_credentials
+from config import get_naver_ads_credentials, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -199,8 +199,29 @@ def _fetch_related_keywords(results_dict: dict, on_status):
             if keyword in results_dict and isinstance(results_dict[keyword], KeywordResult):
                 results_dict[keyword].related_keywords = related_list
 
-        total_related = sum(len(v) for v in related_map.values())
-        on_status(f"연관키워드 API 조회 완료: {len(related_map)}개 키워드 → 총 {total_related}개 연관키워드")
+        total_before = sum(len(v) for v in related_map.values())
+
+        # 최소 검색량 필터링
+        cfg = load_config()
+        min_vol = cfg.get("min_related_volume", 1000)
+        if min_vol > 0:
+            total_filtered = 0
+            for result in results_dict.values():
+                if isinstance(result, KeywordResult) and result.related_keywords:
+                    before = len(result.related_keywords)
+                    result.related_keywords = [
+                        rk for rk in result.related_keywords
+                        if isinstance(rk, dict) and rk.get("total", 0) >= min_vol
+                    ]
+                    total_filtered += before - len(result.related_keywords)
+            total_after = total_before - total_filtered
+            on_status(
+                f"연관키워드 API 조회 완료: {len(related_map)}개 키워드 → "
+                f"총 {total_before}개 중 {total_filtered}개 필터 "
+                f"(총검색량 {min_vol} 미만 제외) → {total_after}개 유지"
+            )
+        else:
+            on_status(f"연관키워드 API 조회 완료: {len(related_map)}개 키워드 → 총 {total_before}개 연관키워드")
     except Exception as e:
         logger.error("연관키워드 API 조회 실패: %s", e)
         on_status(f"연관키워드 API 조회 실패: {e} (HTML 파싱 결과 사용)")
